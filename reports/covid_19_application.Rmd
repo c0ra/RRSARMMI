@@ -1,0 +1,306 @@
+---
+title: "Ridge regularization for spatial auto-regressive models with multicollinearity issues"
+subtitle: "Application of RRSAR and RRSEM to COVID-19 dataset"
+author: "Chavez-Chong, C., Hardouin, C., Fermin, A.K."
+output:
+  html_document:
+    df_print: paged
+    code_folding: show
+    toc: true
+---
+
+```{r setup, echo=FALSE, message = FALSE, collapse= TRUE, warning=FALSE}
+knitr::opts_chunk$set(message = FALSE, collapse= TRUE, warning=FALSE)
+knitr::opts_knit$set(root.dir = "C:/Users/crist/OneDrive/Documents/Covid19France") 
+
+options(Encoding="UTF-8")
+library("RColorBrewer")
+library("dplyr")
+library("gridExtra")
+library("ggbiplot")
+library("ggrepel")
+library("geojsonio")
+library("ggpubr")
+library("grid")
+library("Hmisc")
+library("tidyverse")
+library("xlsx")
+library("kableExtra")
+library("StatMeasures")
+library("lctools")
+library("FactoMineR")
+library("factoextra")
+library("parallel")
+library("reshape")
+library("sp")
+library("sf")
+library("spatialreg")
+library("spdep")
+library("mctest")
+library("GGally")
+
+
+
+```
+
+## Introduction
+ In this document we present de code to reproduce the results of applying  the RRSAR and RRSEM methodologies to real life data.  The data is related to the Covid-19 epidemic in metropolitan France, in 2020.  The aim of the study is to determine whose socio-economic variables have a significant impact on the hospitalization rate for COVID-19.
+
+## Load data
+
+We start by loading spatial data `covid_data.shp` which contains 12 variables and a geometry column type Multi Polygon. The observations are collected from the 96 **départements**, which are administrative units.
+
+The variables are:
+
+* `Department`: name of the French department.
+
+* `Region`: name of the French region.
+
+* `LnHosp`: logarithm of hospitalization rate.
+
+* `LnPop` : logarithm of population density.
+
+* `SLivR` : standard of living gap.
+
+* `C3` : percentage of inhabitants in the three largest cities of the department.
+
+* `Work` : rate of workers.
+
+* `Inac` : inactive rate.
+
+* `A65pls` : share of people aged 65 and over.
+
+* `Emer` : logarithm number of emergency services.
+
+* `FDoc` : number of doctors per habitant
+
+* `Urban`: indicator of an urban department
+
+```{r  loadData, echo=TRUE, message = FALSE, collapse= TRUE}
+france_departement_covid_sf <- st_read("covid_data.shp")
+```
+
+## Exploratory data analysis
+
+We calculate deciles of the variable `LnHosp` using the function `quantile()` and then we create a new variable named `LnHosp_decil` that assigns decile labels to each value in the `LnHosp` column based on the calculated deciles. Finally, we plot a  map to visualize the distribution of hospitalization rates in French departments, with each department shaded according to its decile. 
+
+```{r decilePlot, echo = TRUE, collapse=TRUE, message=FALSE, comment=FALSE}
+quantiles <- quantile(france_departement_covid_sf$LnHosp, prob = seq(0, 1, length = 11), type = 5)
+plotdata <-france_departement_covid_sf%>% 
+  mutate(LnHosp_decil = cut2(france_departement_covid_sf$LnHosp, cuts = as.numeric(quantiles)))
+
+
+ggplot(plotdata) +
+geom_sf(aes(fill = LnHosp_decil))+
+scale_fill_grey(start=1, end=0, name = "Hospitalization rate")+
+theme_void()+
+theme(legend.title =element_text(size=18), legend.text = element_text(size=18))
+```
+
+We  prepare the spatial data by converting the spatial data frame `france_departement_covid_sf` into a `Spatial` object, extract coordinates and store them in the `covid.coords` variable, define neighbors based on the Queen contiguity criterion, and calculate spatial lags up to a lag order of 4 using the neighbor list `Neigh`.
+
+```{r prepareData, echo = TRUE, collapse=TRUE, message = FALSE, comment=FALSE}
+france_departement_covid_sd<- as(france_departement_covid_sf, "Spatial")
+covid.coords <-coordinates(france_departement_covid_sd)
+Neigh <- poly2nb(france_departement_covid_sd, row.names = NULL, queen=TRUE)
+covid.lags <- nblag(Neigh, 4)
+dlist <- nbdists(covid.lags[[1]], coordinates(covid.coords), longlat=TRUE)
+  inv_dlist <- lapply(dlist, function(x) 1/(x))
+  listw  <- nb2listw(covid.lags[[1]],style="B",glist =inv_dlist, zero.policy = TRUE)
+  mat_w <- listw2mat(listw)
+  mat_w <- mat_w/eigen(mat_w)$values[1]
+  listw_1 <-mat2listw(mat_w)
+```
+
+We construct a function `compute_morans_i` that computes Moran's I for a given order and returns a summary of the results as a named vector. We use `lapply` to apply the `compute_morans_i` function to each order and store the results in a list.
+We combine the results from the list into a data frame using `do.call(rbind, results)`.
+Finally, we use `knitr::kable` to display the results in a table.
+
+```{r moranI, echo = TRUE, collapse=TRUE, message = FALSE}
+compute_morans_i <- function(order) {
+  dlist <- nbdists(covid.lags[[order]], coordinates(covid.coords), longlat=TRUE)
+  inv_dlist <- lapply(dlist, function(x) 1/(x))
+  listw  <- nb2listw(covid.lags[[order]],style="B",glist =inv_dlist, zero.policy = TRUE)
+  moran_result <- moran.test(france_departement_covid_sf$LnHosp, listw = listw, zero.policy = TRUE, alternative = "two.sided", na.action = na.omit)
+  return(c(Lag_Order = order, 
+           MoransI = moran_result$estimate, 
+           Mean = moran_result$observed, 
+           SD = moran_result$expected, 
+           Statistic = moran_result$statistic, 
+           p_value = moran_result$p.value))
+}
+
+lag_orders <- 1:4
+results <- lapply(lag_orders, compute_morans_i)
+
+
+results_df <- as.data.frame(do.call(rbind, results))%>%
+  mutate(p_value=format(as.numeric(p_value), digits = 3, trim = F))
+colnames(results_df)<- c("Lag", "MoransI", "Mean", "SD", "Statistic", "p-value")
+knitr::kable(results_df, digits=3)%>%
+  kable_styling(c("striped", "bordered"))
+```
+
+## Principal Components Analysis
+
+We prepare the data to perfom Principal Components Analysis (PCA), first, we create a new dataset called `data` by selecting specific columns from the `france_departement_covid_sf`, then we remove the spatial geometry information from the `data` object, finally, we set the row names of `data` to be the values from the `Department` column.
+
+```{r prepareDATApca, echo = TRUE, collapse=TRUE, message = FALSE}
+data <- france_departement_covid_sf%>%dplyr::select(Urban,LnPop,SLivR,C3, Work,
+                                             Inac, A65pls, Emer, FDoc,LnHosp)
+st_geometry(data) <- NULL
+
+
+rownames(data) <- france_departement_covid_sf$Department
+
+```
+
+We perform PCA and store the results in `covid_france.pca`. With the `quali.sup = c(1)` portion, we specify that we consider `Urban` as a supplementary qualitative variable. Similarly, with `quanti.sup = c(10)`, we specify that we consider `LnHosp` as a supplementary quantitative variable
+
+```{r pca, echo = TRUE, collapse=TRUE, message = FALSE}
+covid_france.pca <- PCA(data, quanti.sup = c(10),quali.sup = c(1), graph = FALSE)
+```
+
+We create a scatterplot of PCA variable contributions.
+
+```{r biplot, echo = TRUE, collapse=TRUE, message = FALSE}
+fviz_pca_var(covid_france.pca,  axes = c(1,2),  col.var = "black", repel = TRUE )+
+  theme(axis.title =element_text(size=14))
+```
+
+We generate PCA plot of individuals in the space of the first two principal components, with color differentiation based on the `Urban` variable. 
+
+```{r indUrban, echo = TRUE, collapse=TRUE, message = FALSE}
+groups <- as.factor(data$Urban)
+fviz_pca_ind(covid_france.pca,
+             col.ind = groups, 
+             palette = c( "#E69F00", "#56B4E9"),
+             legend.title = "Urban",
+             repel = TRUE
+)
+```
+
+We generate PCA plot of individuals in the space of the first two principal components, with color differentiation based on the `Region` variable. 
+
+```{r indRegion, echo = TRUE, collapse=TRUE, message = FALSE}
+nb.cols <- 13
+mycolors <- colorRampPalette(brewer.pal(8, "Set1"))(nb.cols)
+
+groups <- as.factor(france_departement_covid_sf$Region)
+fviz_pca_ind(covid_france.pca,
+             col.ind = groups, # color by groups
+             repel = TRUE,
+             palette = mycolors,
+             geom.ind = "point",
+             legend.title = "Region"
+)
+```
+
+## Estimation
+In this study, our main objective is to discern the significant contributors among the explanatory variables to the propagation of Covid-19, particularly in terms of the hospitalization rate when the admissions are directly linked to the disease. To achieve this, we employ SAR and SEM techniques, both with and without Ridge regularization. This approach allows us to evaluate the outcomes and assess the impact of RRSAR and RRSEM.
+
+Lets set the structure of the model we are considering and the size of the buffer for SLOO.
+
+```{r model, echo = TRUE, collapse=TRUE}
+data <- france_departement_covid_sf
+model <- LnHosp ~LnPop+C3+SLivR+
+  Work+Inac+A65pls+
+  Emer+FDoc
+
+buffer=1
+
+```
+
+We load the required functions.
+
+```{r functions, echo=FALSE}
+setwd(dir = "C:/Users/crist/OneDrive/Documents/Covid19France")
+source("scripts/functions_covid.R")
+
+
+```
+
+We estimate SAR and SEM models without regularization and store the results in `sar` and `sem`, respectively.
+
+```{r SARsem, echo = TRUE, collapse=TRUE, message=FALSE, comment=FALSE}
+ sar <- spatialreg::lagsarlm(model,data=data,listw_1)
+ sar <-summary(sar)
+ sem <- spatialreg::errorsarlm(model,data=data,listw_1)
+ sem <- summary(sem)
+```
+
+We utilize two essential functions, `rrsar` and `rrsem`, available in the loaded script to estimate coefficients for the RRSAR and RRSEM models, respectively. For these estimations, we provide the following specifications:
+
+* `data`: This refers to a dataframe containing the relevant variables used in our model.
+
+* `model`: The model object holds the specific model structure being employed.
+
+* `buffer`: It represents the size of the buffer considered in the Spatial Leave One Out analysis.
+
+* `plot`: By setting this variable to TRUE, we indicate that we wish to generate plots displaying the evolution of coefficient values and log-likelihood concerning variations in $\log(\gamma)$.
+
+
+```{r RRSARrrsem, echo = TRUE, collapse=TRUE, message=FALSE, comment=FALSE, cache=TRUE, dpi = 72}
+coef_RRSAR <- rrsar(data, model, buffer, plot=TRUE)
+coef_RRSEM <- rrsem(data, model, buffer, plot=TRUE)
+```
+
+We plot the coefficients path and the log-likelihood versus the ridge regularization parameter for RRSAR and RRSEM.
+
+```{r plotResults, echo = TRUE, collapse=TRUE, message=FALSE, comment=FALSE, cache=TRUE}
+
+```
+
+
+We use, `perm_f_test_parallel`, available in the loaded script to perform a permutation test to assess the influence of the explanatory variables on the dependent variable. We consider:
+
+* `data`: This refers to a dataframe containing the relevant variables used in our model.
+
+* `model`: The model object holds the specific model structure being employed.
+
+* `B`: The number of permutations.
+
+* `buffer`: It represents the size of the buffer considered in the Spatial Leave One Out analysis.
+
+```{r Ftest, echo = TRUE, collapse=TRUE, mesage=FALSE, cache=TRUE}
+p_F_test<-perm_f_test_parallel(data, model, B=100, buffer = 1)
+```
+
+Finally, we present the results in a table.
+```{r results, echo = TRUE, collapse=TRUE, mesage=FALSE}
+p_val_rho_rrsar <- format(as.numeric(coef_RRSAR[["pvalue"]]), digits = 0, trim = F, nsmall = 3)
+p_val_coef_rrsar <- format(as.numeric(p_F_test$SAR), digits = 0, trim = F, nsmall = 3)
+
+p_val_rho_rrsem <- format(as.numeric(coef_RRSEM[["pvalue"]]), digits = 0, trim = F, nsmall = 3)
+p_val_coef_rrsem <- format(as.numeric(p_F_test$SEM), digits = 0, trim = F, nsmall = 3)
+
+
+dt <- data.frame(coefsar=c(sar[["Coef"]][-1,1],NA,sar[["rho"]][["rho"]], NA),
+                 pvaluesar = c(sar[["Coef"]][-1,4],NA,as.numeric(sar[["LR1"]][["p.value"]]),NA),
+                 coefsar_ridge=c(coef_RRSAR[["Coefficients"]],coef_RRSAR[["gamma"]],
+                           coef_RRSAR[["rho"]],NA),
+                 pvaluesar_ridge=c( p_val_coef_rrsar, NA,p_val_rho_rrsar, NA),
+                 coefsem = c(sem[["Coef"]][-1,1],NA,NA,sem[["lambda"]][["lambda"]]),
+                 pvaluesem = c(sem[["Coef"]][-1,4], NA, NA, as.numeric(sem[["LR1"]][["p.value"]])),
+                 coefsem_ridge=c(coef_RRSEM[["Coefficients"]],coef_RRSEM[["gamma"]],
+                           NA,coef_RRSEM[["lambda"]]),
+                 pvaluesem_ridge=c( p_val_coef_rrsem, rep(NA,2),p_val_rho_rrsem)
+               )
+
+  rownames(dt) <-c(rownames(p_F_test),"$\\gamma$", "$\\rho$","$\\lambda$")
+
+
+opts <- options(knitr.kable.NA = "")
+knitr::kable(dt,  col.names = c("Coef",
+                                "p-value",
+                                "Coef",
+                                "p-value",
+                                "Coef",
+                                "p-value",
+                                "Coef",
+                                "p-value" ), digits = 3)%>%
+  kable_styling(c("striped", "bordered")) %>%
+  add_header_above(c("",
+                     "SAR" = 2,"RRSAR" = 2, "SEM" = 2,"RRSEM" = 2))
+
+```
