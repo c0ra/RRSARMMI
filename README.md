@@ -93,17 +93,17 @@ The `functions_*` scripts are called in the main .Rmd files to run the SFRR, RRS
 
 The reports folder contains R Markdown files for generating reports and .pdf files with the full results that are summarised in our paper. 
 
-- `covid_19_application.Rmd`: Instructions to replicate the explorative analysis performed on the COVID-19 dataset, as well as to apply RRSAR and RRSEM methodology to estimate all the parameters.
+- `covid_19_application.Rmd`: Instructions to replicate the exploratory analysis performed on the COVID-19 dataset, as well as to apply RRSAR and RRSEM methodology to estimate all the parameters and to assess the importance of the covariates on the COVID-19 intensity.
 - `example_simulation_estimation_sar.Rmd`: Instructions to generate one simulation following the SAR model structure and to estimate the model coefficients using the OLS, SAR, Ridge regression, SFRR and RRSAR procedures.
 - `example_simulation_estimation_sem.Rmd`: Instructions to generate one simulation following the SEM model structure and to estimate the model coefficients using the OLS, SEM, Ridge regression, SFRR and RRSAR procedures.
-- `complete_results_sar.pdf`: Full results of simulation study with data generated following the SAR model.
-- `complete_results_sem.pdf`: Full results of simulation study with data generated following the SEM model.
+- `complete_results_sar.pdf`: Full results of our simulation study with data generated following the SAR model.
+- `complete_results_sem.pdf`: Full results of our simulation study with data generated following the SEM model.
 
 To reproduce specific results, run the corresponding `.Rmd` file. Make sure to adjust file paths and settings as needed.
 
 ## License
 
-This project is licensed under the [Creative Commons Zero License](LICENSE).
+This project is licensed under the [MIT License](LICENSE).
 
 ## Contact
 
