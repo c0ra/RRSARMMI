@@ -138,7 +138,7 @@ rrsar <- function(data, model, buffer, scale=FALSE){
            method="model.frame")
   
   y <- model.extract(mf, "response")
-  x <- model.matrix(mt, mf)[,-1]
+  x <- model.matrix(mt, mf)
   Neigh <- cell2nb(30, 30, type="rook", torus=FALSE, legacy=FALSE)
   
   
@@ -508,7 +508,7 @@ rrsem <- function(data, model, buffer, scale=FALSE){
   
   y <- model.extract(mf, "response")
   x <- model.matrix(mt, mf)
-  x <- x[,-1]
+
   
   Neigh <- cell2nb(30, 30, type="rook", torus=FALSE, legacy=FALSE)
   n <- nrow(x)
