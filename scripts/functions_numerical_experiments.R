@@ -1,45 +1,5 @@
-library(glmnet)
 
 
-adjust_ridge<-function(lambda){
-  
-  coefs <-  drop(solve(crossprod(x_train) + diag(lambda, p), crossprod(x_train, y_train)))
-  
-  
-  y_pred = x_test%*%coefs
-  
-  return(y_pred)
-}
-
-
-beta =  function(l){
-  coefs <- drop(solve(crossprod(x_ridge) + diag(l, (p)), crossprod(x_ridge, y_ridge)))
-  return(coefs)
-}
-
-ridge_coef<-function(lambda){
-  
-  
-  x<-x_train
-  
-  coefs<-  drop(solve(crossprod(x_train) + diag(lambda, (p)), crossprod(x_train, y_train)))
-  
-  
-  y_pred = x%*%coefs
-  
-  SSE <- crossprod(y_pred-y_train)
-  s2 <- SSE/nrow(x_train)
-  
-  
-  x<-x_test
-  
-  logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2)+ ldet -(1/(2*s2))*crossprod(y_test-x%*%coefs)
-  
-  
-  res <- logLik
-  
-  return(res)
-}
 
 # rho (SAR) estimation functions ----
 
@@ -51,30 +11,33 @@ sar.lag.mixed.f <- function(rho, env) {
     n <- get("n", envir=env)
     s2 <- SSE/n
     ldet <- spatialreg::do_ldet(rho, env)
-    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2))
+    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2)-(n/2)) # the term n/2 comes from (1/(2*s2))*crossprod(y.l)
   }else{
     e.lm.null <- get("y", envir=env) - get("x", envir=env)%*%beta_ridge
     e.lm.w <- get("wy", envir=env) - get("x", envir=env)%*%beta_ridge
-    
+   
     SSE <-crossprod(e.lm.null-rho*e.lm.w)
     n <- get("n", envir=env)
     s2 <- SSE/n
     ldet <- spatialreg::do_ldet(rho, env)
-    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2))
+    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2)-(n/2))
   }
   ret
 }
 
 
-for_ridge_sar<-function(data,grid,formula, beta_ridge){
+for_ridge_sar<-function(data,formula, beta_ridge, scale= FALSE){
   verbose = FALSE
   
   
   method<-"eigen"  
   
+
+  
+  
   Neigh <- cell2nb(30, 30, type="rook", torus=FALSE, legacy=FALSE)
-  covid.lags <- nblag(Neigh, 2)
-  listw  <- nb2listw(covid.lags[[1]],style="W", zero.policy = TRUE)
+  lags <- nblag(Neigh, 2)
+  listw  <- nb2listw(lags[[1]],style="W", zero.policy = TRUE)
   mat_w <- listw2mat(listw)
   
   
@@ -97,6 +60,7 @@ for_ridge_sar<-function(data,grid,formula, beta_ridge){
   
   y <- model.extract(mf, "response")
   x <- model.matrix(mt, mf)
+  x <- x[,-1]
   n <- NROW(x)
   m <- NCOL(x)
   xcolnames <- colnames(x)
@@ -132,18 +96,7 @@ for_ridge_sar<-function(data,grid,formula, beta_ridge){
   
   
   # To compute rho p-value using LR
-  if (is.null(beta_ridge)){
-    y.l <- get("y", envir = env)- rho*get("wy", envir = env)
-    SSE <- crossprod(y.l)
-    n <- get("n", envir=env)
-    s2 <- SSE/n
-    ldet <- spatialreg::do_ldet(rho, env)
-    
-    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2)) # loglikelihood 
-    
-    ret_0 <- ( - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2)) # loglikelihood when rho = 0
-    
-  }else{
+
     
     e.lm.null <- y - x%*%beta_ridge
     
@@ -153,22 +106,16 @@ for_ridge_sar<-function(data,grid,formula, beta_ridge){
     
     s2 <- SSE/n
     
-    ldet <- spatialreg::do_ldet(rho, env)
-    
-    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2)) # loglikelihood 
-    
-    ret_0 <- -((n/2)*log(2*(3.141593))) - (n/2)*log(crossprod(e.lm.null)/n) # loglikelihood when rho = 0
-  }
+  
   
   ldet <- spatialreg::do_ldet(rho, env)
   
   #Output parameters
-  LR <- 2*(ret-ret_0)
-  p_value <- pchisq(LR, df=1, lower.tail = FALSE)
+ 
   y <- y - rho*wy
   x <- x
   ldet <- ldet
-  sar_arguments <- list(rho=rho, y = y, x = x, W=mat_w, pvalue= p_value, statistic= LR, ldet=ldet, s2=s2)
+  sar_arguments <- list(rho=rho, y = y, x = x, W=mat_w, ldet=ldet, s2=s2)
   return(sar_arguments)
 }
 
@@ -182,24 +129,23 @@ for_ridge_sar<-function(data,grid,formula, beta_ridge){
 
 # 2.2 Alternating minimization algorithm  (SAR) ----
 #Maximizing likelihood
-est_ridge_sar_2_2 <- function(data, grid, model, buffer){
+rrsar <- function(data, model, buffer, scale=FALSE){
   
   
   n<-nrow(data)
-  
   mt <- terms(model, data = data)
   mf <- lm(model, data, 
            method="model.frame")
   
   y <- model.extract(mf, "response")
-  x <- model.matrix(mt, mf)
+  x <- model.matrix(mt, mf)[,-1]
   Neigh <- cell2nb(30, 30, type="rook", torus=FALSE, legacy=FALSE)
   
   
   # Step 1----
   # Estimate gamma and beta_ridge for Y=X*beta_ridge + epsilon
   fit <- glmnet(x, y, alpha = 0, standardize = FALSE, intercept=FALSE)
-  lambda_int<-n*fit$lambda
+  lambda_int<-fit$lambda
   n<-nrow(x)
   logLik_sar <- matrix(NA, n, length(lambda_int))
   
@@ -219,13 +165,9 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
       data$SLOO[k]<-'Test'
       
       
-      train.data <- data[data$SLOO=='Train',]
-      test.data  <- data[data$SLOO=='Test',]
-      
-      predictorvarnames<-all.vars(model[[3]])
-      
       x_train <- x[data$SLOO=='Train',]
       y_train <- y[data$SLOO=='Train']
+      
       p <- ncol(x)
       
       
@@ -234,25 +176,20 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
       y_test <-y[data$SLOO=='Test']
       
       ridge_coef<-function(lambda){
-        
-        
-        x<-x_train
+      
         
         coefs<-  drop(solve(crossprod(x_train) + diag(lambda, (p)), crossprod(x_train, y_train)))
         
         
-        y_pred = x%*%coefs
+        y_pred = x_train%*%coefs
         
         SSE <- crossprod(y_pred-y_train)
         s2 <- SSE/nrow(x_train)
+      
         
+        logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2) -(1/(2*s2))*crossprod(y_test-x_test%*%coefs)
         
-        x<-x_test
-        
-        logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2) -(1/(2*s2))*crossprod(y_test-x%*%coefs)
-        
-        
-        
+
         res <- logLik
         
         return(res)
@@ -267,14 +204,15 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
   
   #Compute MSE and select best lambda sar
   mlogLik_sar= colMeans(logLik_sar)
-  
   plotdat_sar<-tibble(logLik=mlogLik_sar, lambda=lambda_int)
   lL_sar<- max(plotdat_sar$logLik)
   lambda_sar<- plotdat_sar$lambda[plotdat_sar$logLik==lL_sar]
+  
+  
   coef_sar <-  drop(solve(crossprod(x) + diag(lambda_sar, p), crossprod(x, y)))
   predictorsnames<-all.vars(model[[3]])
   names(coef_sar)<- c(predictorsnames )
-  y_predicted <- predict(fit, s = lambda_sar, newx = x)
+
   
   
   j=1
@@ -291,34 +229,23 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
   beta_ridge=coef_sar
   
   # Step 2----
-  param_ridge_sar <- for_ridge_sar(data,grid, model, beta_ridge) # rho estimation for y=rho*W*y+ X*beta_ridge + epsilon
-  
-  x_ridge<-param_ridge_sar$x
-  
-  
-  y_ridge<-param_ridge_sar$y
-  
-  rho <- param_ridge_sar$rho
-  s2 <- param_ridge_sar$s2
-  ldet <- param_ridge_sar$ldet
-  fit <- glmnet(x_ridge, y_ridge, alpha = 0, standardize = FALSE, intercept=FALSE)
-  lambda_int<-n*fit$lambda
+  param_ridge_sar <- for_ridge_sar(data, model, beta_ridge, scale=scale) # rho estimation for y=rho*W*y+ X*beta_ridge + epsilon
   
   while ((delta_rho > tol)||(delta_beta > tol)) {
     
     
     
     #Step 3----
-    x_ridge<-param_ridge_sar$x
+    x_filtered <-param_ridge_sar$x
     
     
-    y_ridge<-param_ridge_sar$y
+    y_filtered <-param_ridge_sar$y
     
     rho <- param_ridge_sar$rho
     s2 <- param_ridge_sar$s2
     ldet <- param_ridge_sar$ldet
-    fit <- glmnet(x_ridge, y_ridge, alpha = 0, standardize = FALSE, intercept=FALSE)
-    lambda_int<-n*fit$lambda
+    fit <- glmnet(x_filtered, y_filtered, alpha = 0, standardize = FALSE, intercept=FALSE)
+    lambda_int<-fit$lambda
     
     
     logLik_sar <- matrix(NA, n, length(lambda_int))
@@ -337,32 +264,21 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
         }}else data$SLOO[(unlist(Neigh[[k]]))]<-'DeadZone'
         data$SLOO[k]<-'Test'
         
+      
+        x_train <- x_filtered[data$SLOO=='Train',]
+        y_train <- y_filtered[data$SLOO=='Train']
         
-        train.data <- data[data$SLOO=='Train',]
-        test.data  <- data[data$SLOO=='Test',]
-        
-        x_train <- x_ridge[data$SLOO=='Train',]
-        y_train <- y_ridge[data$SLOO=='Train']
-        
-        x_test <-x_ridge[data$SLOO=='Test',]
-        y_test <-y_ridge[data$SLOO=='Test']
+        x_test <-x_filtered[data$SLOO=='Test',]
+        y_test <-y_filtered[data$SLOO=='Test']
         
         ridge_coef<-function(lambda){
           
           
-          x<-x_train
           
           coefs<-  drop(solve(crossprod(x_train) + diag(lambda, (p)), crossprod(x_train, y_train)))
           
-          
-          y_pred = x%*%coefs
-          
-          
-          
-          
-          x<-x_test
-          
-          logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2)+ ldet -(1/(2*s2))*crossprod(y_test-x%*%coefs)
+        
+          logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2) -(1/(2*s2))*crossprod(y_test-x_test%*%coefs)
           
           res <- logLik
           
@@ -381,24 +297,23 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
     lL_sar<- max(plotdat_sar$logLik)
     
     lambda_sar<- plotdat_sar$lambda[plotdat_sar$logLik==lL_sar]
-    coef_sar <-  drop(solve(crossprod(x_ridge) + diag(lambda_sar, p), crossprod(x_ridge, y_ridge)))
+    coef_sar <-  drop(solve(crossprod(x_filtered) + diag(lambda_sar, p), crossprod(x_filtered, y_filtered)))
     predictorsnames<-all.vars(model[[3]])
     names(coef_sar)<- c(predictorsnames )
     
     beta_ridge=coef_sar
     
     # Step 4----
-    param_ridge_sar <- for_ridge_sar(data,grid, model, beta_ridge) # rho estimation for y=rho*W*y+ X*beta_ridge + epsilon
+    param_ridge_sar <- for_ridge_sar(data, model, beta_ridge,scale=scale) # rho estimation for y=rho*W*y+ X*beta_ridge + epsilon
     rho <-  param_ridge_sar$rho
-    x_ridge <- param_ridge_sar$x
+    x_filtered <- param_ridge_sar$x
     W <- param_ridge_sar$W
-    y_predicted <- solve((diag(1,n)-rho*W),(x_ridge%*%coef_sar))
     
     beta_ridge=coef_sar
     
     #Stop criterion
     if(j==1){
-      rho_new=param_ridge_sar$rho
+      rho_new=rho
       delta_rho=rho_new
       
       beta_new=coef_sar
@@ -406,7 +321,7 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
       
     }else{
       rho_old=rho_new
-      rho_new=param_ridge_sar$rho
+      rho_new=rho
       delta_rho=rho_old-rho_new
       
       beta_old=beta_new
@@ -425,17 +340,8 @@ est_ridge_sar_2_2 <- function(data, grid, model, buffer){
   
   vector_rho <- vector_rho[1:j-1] 
   matrix_beta <- matrix_beta[1:j-1,]
-  results<-list(Model = model,
-                rho = param_ridge_sar$rho,
-                Coefficients = coef_sar,
-                gamma = lambda_sar,
-                predicted_values = y_predicted,
-                convergence_rho = vector_rho,
-                convergence_gamma = vector_gamma,
-                convergence_beta = matrix_beta,
-                pvalue=param_ridge_sar$pvalue,
-                statistic=param_ridge_sar$statistic,
-                iterations=j-1)
+  results<-list(rho = rho_new,
+                Coefficients = coef_sar)
   
   return(results)
 }
@@ -447,13 +353,10 @@ sem_error_sse <- function(lambda, env) {
   beta_ridge = get("beta_ridge", envir=env)
   if (is.null(beta_ridge)){
     yl <- get("y", envir=env) - lambda * get("wy", envir=env)
-    yl <- get("sw", envir=env) * yl
     SSE <- crossprod(yl) } else { 
       yl <- get("y", envir=env) - lambda * get("wy", envir=env)
-      yl <- get("sw", envir=env) * yl
       n <-get("n", envir=env)
       xl <- get("x", envir=env)%*%beta_ridge - lambda * get("WX", envir=env)%*%beta_ridge
-      xl <- get("sw", envir=env) * xl
       SSE <-  crossprod(yl - xl)}
   SSE}
 
@@ -463,8 +366,7 @@ sem.error.f <- function(lambda, env) {
   n <- get("n", envir=env)
   s2 <- SSE/n
   ldet <- spatialreg::do_ldet(lambda, env)
-  ret <- (ldet + (1/2)*get("sum_lw", envir=env) - ((n/2)*log(2*(3.141593))) - 
-            (n/2)*log(s2) - (1/(2*(s2)))*SSE)
+  ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2) - (1/(2*(s2)))*SSE)
   if (get("verbose", envir=env)) cat("lambda:", lambda, " function:", ret, " Jacobian:", ldet, " SSE:", SSE, "\n")
   assign("f_calls", get("f_calls", envir=env)+1L, envir=env)
   ret
@@ -473,14 +375,13 @@ sem.error.f <- function(lambda, env) {
 
 for_ridge_sem<-function(data,formula, beta_ridge, scale = FALSE){
   etype<-"error"
-  Durbin<-FALSE
   zero.policy=TRUE
   method<-"eigen" 
-  
+
   
   Neigh <- cell2nb(30, 30, type="rook", torus=FALSE, legacy=FALSE)
-  covid.lags <- nblag(Neigh, 2)
-  listw  <- nb2listw(covid.lags[[1]],style="W", zero.policy = TRUE)
+  lags <- nblag(Neigh, 2)
+  listw  <- nb2listw(lags[[1]],style="W", zero.policy = TRUE)
   mat_w <- listw2mat(listw)
   
   
@@ -506,10 +407,8 @@ for_ridge_sem<-function(data,formula, beta_ridge, scale = FALSE){
   
   y <- model.response(mf, "numeric")
   x <- model.matrix(mt, mf)
-  y <- scale(y, scale=scale) #center response
-  x <- scale(x, scale=scale) #center variables
+  x <- x[,-1]
   n <- nrow(x)
-  weights <- rep(as.numeric(1), n)
   
   m <- NCOL(x)
   xcolnames <- colnames(x)
@@ -539,8 +438,7 @@ for_ridge_sem<-function(data,formula, beta_ridge, scale = FALSE){
   can.sim <- FALSE
   if (listw$style %in% c("W", "S")) 
     can.sim <- spatialreg::can.be.simmed(listw)
-  sum_lw <- sum(log(weights))
-  sw <- sqrt(weights)
+
   
   
   env <- new.env()
@@ -561,8 +459,6 @@ for_ridge_sem<-function(data,formula, beta_ridge, scale = FALSE){
   assign("similar", FALSE, envir=env)
   assign("f_calls", 0L, envir=env)
   assign("hf_calls", 0L, envir=env)
-  assign("sum_lw", sum_lw, envir=env)
-  assign("sw", sw, envir=env)
   assign("verbose", FALSE, envir = env)
   interval <- spatialreg::jacobianSetup(method, env, con, pre_eig=con$pre_eig,
                                         trs=trs, interval=interval)
@@ -576,25 +472,15 @@ for_ridge_sem<-function(data,formula, beta_ridge, scale = FALSE){
   
   
   # Loglikelihood test for lambda significance 
-  if (is.null(beta_ridge)){
-    yl <- y - lambda * wy
-    yl <- sw * yl
-    SSE <- crossprod(yl) 
-    s2 <- SSE/n
-    ldet <- spatialreg::do_ldet(lambda, env)
-    ret <- (ldet - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2) - n/2)
-    ret_0 <- ( - ((n/2)*log(2*(3.141593))) - (n/2)*log(s2) - n/2)
-  } else { 
+
     yl <- y - lambda *wy
-    yl <- sw * yl
     xl <- x%*%beta_ridge - lambda *WX%*%beta_ridge
-    xl <- sw * xl
     SSE <-  crossprod(yl - xl)
     s2 <- SSE/n
     ldet <- spatialreg::do_ldet(lambda, env)
-    ret <- (ldet - ((n/2)*log(2*(3.141593))) -  (n/2)*log(s2) - n/2)
-    ret_0 <- ( - ((n/2)*log(2*(3.141593))) - (n/2)*log(crossprod(y-x%*%beta_ridge)/n) - n/2)
-  }
+    ret <- (ldet - ((n/2)*log(2*(3.141593))) -  (n/2)*log(s2))
+    ret_0 <- ( - ((n/2)*log(2*(3.141593))) - (n/2)*log(crossprod(y-x%*%beta_ridge)/n))
+
   
   
   #Output parameters
@@ -613,28 +499,24 @@ for_ridge_sem<-function(data,formula, beta_ridge, scale = FALSE){
 
 # 2.2 Alternating minimization algorithm  (SEM) ----
 #maximizing likelihood
-est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
+rrsem <- function(data, model, buffer, scale=FALSE){
   
   
-  
-  data.sp<-as(data,'Spatial') #transform to sp object for some functions
-  coords<-coordinates(data.sp)
   mf <- lm(model, data,  method="model.frame")
   mf <- eval(mf, parent.frame())
   mt <- attr(mf, "terms")
   
   y <- model.extract(mf, "response")
-  y <- scale(y, scale=scale) #center response
   x <- model.matrix(mt, mf)
-  x<-  scale(x, scale=scale) #center variables
+  x <- x[,-1]
   
   Neigh <- cell2nb(30, 30, type="rook", torus=FALSE, legacy=FALSE)
   n <- nrow(x)
   
   # Step 1----
   # Estimate gamma and beta_ridge for Y=X*beta_ridge + epsilon
-  fit <- glmnet(x, y, alpha = 0, standardize = FALSE, intercept=FALSE)
-  lambda_int<-n*fit$lambda
+   fit <- glmnet(x, y, alpha = 0, standardize = FALSE, intercept=FALSE)
+  lambda_int<-fit$lambda
   logLik_sem <- matrix(NA, n, length(lambda_int))
   
   
@@ -653,10 +535,7 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
       }}else data$SLOO[(unlist(Neigh[[k]]))]<-'DeadZone'
       data$SLOO[k]<-'Test'
       
-      
-      train.data <- data[data$SLOO=='Train',]
-      test.data  <- data[data$SLOO=='Test',]
-      predictorvarnames<-all.vars(model[[3]])
+     
       
       x_train <- x[data$SLOO=='Train',]
       y_train <- y[data$SLOO=='Train']
@@ -706,8 +585,8 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
   predictorsnames<-all.vars(model[[3]])
   names(coef_sem)<- c(predictorsnames )
   j=1
-  vector_lambda <- numeric(100) # to store the lambda values
-  matrix_beta <- matrix(NA,100,p) # to store the beta coefficients
+  vector_lambda <- numeric(200) # to store the lambda values
+  matrix_beta <- matrix(NA,200,p) # to store the beta coefficients
   tol=0.000001 # tolerance to assess convergence of the algorithm
   delta_lambda=1 # initialize the element related to lambda convergence in the condition
   delta_beta=1 # initialize the element related to beta convergence in the condition
@@ -717,33 +596,23 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
   # Step 2----
   param_ridge_sem <- for_ridge_sem(data, model, beta_ridge, scale=scale) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
   
-  x_ridge<-param_ridge_sem$x
-  
-  
-  y_ridge<-param_ridge_sem$y
-  
-  lambda<-param_ridge_sem$lambda
-  ldet<-param_ridge_sem$ldet
-  s2<-param_ridge_sem$s2
-  fit <- glmnet(x_ridge, y_ridge, alpha = 0, standardize = FALSE, intercept=FALSE)
-  lambda_int<-n*fit$lambda
   
   while ((delta_lambda > tol)||(delta_beta > tol)) {
     
     
     
     #Step 3----
-    x_ridge<-param_ridge_sem$x
+    x_filtered<-param_ridge_sem$x
     
     
-    y_ridge<-param_ridge_sem$y
+    y_filtered<-param_ridge_sem$y
     
     lambda<-param_ridge_sem$lambda
     ldet<-param_ridge_sem$ldet
     s2<-param_ridge_sem$s2
-    fit <- glmnet(x_ridge, y_ridge, alpha = 0, standardize = FALSE, intercept=FALSE)
-    lambda_int<-n*fit$lambda
-    n<-nrow(x_ridge)
+    fit <- glmnet(x_filtered, y_filtered, alpha = 0, standardize = FALSE, intercept=FALSE)
+    lambda_int<-fit$lambda
+    n<-nrow(x)
     logLik_sem <- matrix(NA, n, length(lambda_int))
     
     # Define training and testing data
@@ -762,32 +631,24 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
         data$SLOO[i]<-'Test'
         
         
-        train.data <- data[data$SLOO=='Train',]
-        test.data  <- data[data$SLOO=='Test',]
-        
-        x_train <- x_ridge[data$SLOO=='Train',]
-        y_train <- y_ridge[data$SLOO=='Train',]
-        p<-ncol(x_ridge)
-        x_test <- x_ridge[data$SLOO=='Test',]
-        y_test <- y_ridge[data$SLOO=='Test']
+       
+        x_train <- x_filtered[data$SLOO=='Train',]
+        y_train <- y_filtered[data$SLOO=='Train']
+        p<-ncol(x_filtered)
+        x_test <- x_filtered[data$SLOO=='Test',]
+        y_test <- y_filtered[data$SLOO=='Test']
         
         
         ridge_coef<-function(lambda){
           
           
-          x<-x_train
           
-          coefs<-  drop(solve(crossprod(x_train) + diag(lambda, (p-1)), crossprod(x_train, y_train)))
-          
-          
-          y_pred = x%*%coefs
+          coefs<-  drop(solve(crossprod(x_train) + diag(lambda, (p)), crossprod(x_train, y_train)))
           
           
-          x<-x_test
+          logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2) -(1/(2*s2))*crossprod(y_test-x_test%*%coefs)
           
-          logLik <- -(1/2)*log(2*(3.141593)) -(1/2)*log(s2)+ ldet -(1/(2*s2))*crossprod(y_test-x%*%coefs)
-          
-          
+       
           
           res <- logLik
           
@@ -806,9 +667,7 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
     plotdat_sem<-tibble(logLik=mlogLik_sem, lambda=lambda_int)
     lL_sem<- max(plotdat_sem$logLik)
     lambda_sem<- plotdat_sem$lambda[plotdat_sem$logLik==lL_sem]
-    # coef_sem <- predict(fit,x_ridge,type = "coefficients", s=lambda_sem)
-    # coef_sem <- coef_sem@x
-    coef_sem <- drop(solve(crossprod(x_ridge) + diag(lambda_sem, (p-1)), crossprod(x_ridge, y_ridge)))
+    coef_sem <- drop(solve(crossprod(x_filtered) + diag(lambda_sem, (p)), crossprod(x_filtered, y_filtered)))
     predictorsnames<-all.vars(model[[3]])
     names(coef_sem)<- c(predictorsnames )
     W <- param_ridge_sem$W
@@ -819,15 +678,15 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
     # Step 4----
     param_ridge_sem <- for_ridge_sem(data, model, beta_ridge, scale=scale) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
     
-    x_ridge <-param_ridge_sem$x
+    x_filtered <-param_ridge_sem$x
     lambda <- param_ridge_sem$lambda
     W <- param_ridge_sem$W
     
-    y_predicted <- solve((diag(1,n)-lambda*W),(x_ridge%*%coef_sem))
+    y_predicted <- solve((diag(1,n)-lambda*W),(x_filtered%*%coef_sem))
     
     #Stop criterion
     if(j==1){
-      lambda_new=param_ridge_sem$lambda
+      lambda_new=lambda
       delta_lambda=lambda_new
       
       beta_new=coef_sem
@@ -835,7 +694,7 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
       
     }else{
       lambda_old=lambda_new
-      lambda_new=param_ridge_sem$lambda
+      lambda_new=lambda
       delta_lambda=lambda_old-lambda_new
       
       beta_old=beta_new
@@ -854,17 +713,10 @@ est_ridge_sem_2_2 <- function(data, model, buffer, scale=FALSE){
   
   vector_lambda <- vector_lambda[1:j-1] 
   matrix_beta <- matrix_beta[1:j-1,]
-  results<-list(Model = model,
+  results<-list(
                 lambda = param_ridge_sem$lambda,
-                Coefficients = coef_sem,
-                gamma = lambda_sem,
-                x=x_ridge,
-                predicted_values = y_predicted,
-                convergence_lambda = vector_lambda,
-                convergence_beta = matrix_beta,
-                iterations=j-1,
-                pvalue=param_ridge_sem$pvalue,
-                statistic=param_ridge_sem$statistic)
+                Coefficients = coef_sem
+               )
   
   return(results)
 } 
