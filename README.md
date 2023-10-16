@@ -94,8 +94,10 @@ The `functions_*` scripts are called in the main .Rmd files to run the SFRR, RRS
 The reports folder contains .html files for generated in Rmarkdown and .pdf files with the full results that are summarised in our paper. 
 
 - `covid_19_application.Rmd`: Instructions to replicate the exploratory analysis performed on the COVID-19 dataset, as well as to apply RRSAR and RRSEM methodology to estimate all the parameters and to assess the importance of the covariates on the COVID-19 intensity.
-- `example_simulation_estimation_sar.html`: Instructions to generate one simulation following the SAR model structure and to estimate the model coefficients using the OLS, SAR, Ridge regression, SFRR and RRSAR procedures.
-- `example_simulation_estimation_sem.html`: Instructions to generate one simulation following the SEM model structure and to estimate the model coefficients using the OLS, SEM, Ridge regression, SFRR and RRSAR procedures.
+- `example_simulation_estimation_sar.Rmd`: Instructions to generate one simulation following the SAR model structure and to estimate the model coefficients using the OLS, SAR, Ridge regression, SFRR and RRSAR procedures.
+- `example_simulation_estimation_sar.html`: Report with instructions to generate one simulation following the SAR model structure and to estimate the model coefficients using the OLS, SAR, Ridge regression, SFRR and RRSAR procedures.
+- - `example_simulation_estimation_sem.Rmd`: Instructions to generate one simulation following the SEM model structure and to estimate the model coefficients using the OLS, SEM, Ridge regression, SFRR and RRSAR procedures.
+- `example_simulation_estimation_sem.html`: Report with instructions to generate one simulation following the SEM model structure and to estimate the model coefficients using the OLS, SEM, Ridge regression, SFRR and RRSAR procedures.
 - `complete_results_sar.pdf`: Full results of our simulation study with data generated following the SAR model.
 - `complete_results_sem.pdf`: Full results of our simulation study with data generated following the SEM model.
 
