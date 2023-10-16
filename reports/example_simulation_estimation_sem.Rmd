@@ -156,14 +156,12 @@ We compute the dependent variable. The error term is the product of a sampled st
   epsilon <- rnorm(n*m, mean=0, sd=1) 
   
   y_error <- factor%*%X%*%ones(p,1) + factor%*%epsilon
-  sd_y_error <- sd(y_error)
   y_error <- (y_error-mean(y_error))
   
 
  
   sim.data  <- data.frame(mget(paste0("x.", 1:p)), 
-                               y_error,
-                                sd_y_error)
+                               y_error)
 
 
 ```
