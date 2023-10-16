@@ -48,7 +48,7 @@ library(calibrate)
 ## Introduction
 
 In our paper entitled "Ridge regularization for spatial autoregressive models with multicollinearity issues", we introduce a novel approach for conducting Ridge regression for spatial autoregressive models.
-In this document we provide the R code used for the simulations in the case of the SEM model defined in equation 1 of the article.
+In this document we provide the R code used for the simulations in the case of the SEM model defined in equation (2) of the article.
 As a reference, here is the **RRSEM estimation algorithm** that we propose:
 
 
@@ -176,8 +176,7 @@ To assess the performance of these estimation procedures, we computed the Mean S
 First, we load the script with the estimation functions.
 
 ```{r loadFunctions, echo = TRUE, collapse=TRUE, message = FALSE}
-  
-  setwd("C:/Users/crist/OneDrive/Documents/sim_RRSAR")
+setwd("C:/Users/crist/OneDrive/Documents/SIM_RRSAR_increased_variance") #change to appropiate directory
   source("scripts/functions_numerical_experiments.R")
 
 ```
