@@ -67,8 +67,8 @@ First, we create the grid. We considered a 30x30 grid contained in the square $[
 gridsize = c(30L, 30L)
 n= gridsize[1]
 m= gridsize[2]
-Xvec <- seq(0, 1, len = gridsize[1])
-Yvec <- seq(0, 1, len = gridsize[2])
+Xvec <- seq(0, 10, len = gridsize[1])
+Yvec <- seq(0, 10, len = gridsize[2])
 grd <- expand.grid(Y = Yvec, X = Xvec)
 ```
 
@@ -89,7 +89,7 @@ x.1 <- as.vector(t(RFsimulate(expCov, x = Xvec, y = Yvec, spConform = FALSE)))
 We generate the second covariate `x.2` as a Gaussian random field with a Gaussian covariance function `gausssCov` with variance  equal to 1 and scale set to 0.4.
 
 ```{r computeX2, echo = TRUE, collapse=TRUE}
-gaussCov <- RMgauss(var = 0.1, scale = 0.1) #0.4 was a bit much
+gaussCov <- RMgauss(var = 1, scale = 0.4) 
 x.2 <- as.vector(t(RFsimulate(gaussCov, x = Xvec, y = Yvec, spConform = FALSE)))
 
 ```
@@ -131,7 +131,7 @@ We consider in the paper the structure of the SAR model, with 5 different values
 ```{r computeDepFactor, echo = TRUE, collapse=TRUE}
 
 rho=0.3
-factor_0.3 <- solve(diag(1, n*m) - rho*W)  
+factor <- solve(diag(1, n*m) - rho*W)  
 
 ```
 
@@ -155,15 +155,15 @@ We compute the dependent variable. The error term is the product of a sampled st
 
   epsilon <- rnorm(n*m, mean=0, sd=1) 
   
-  y_lag_0.3 <- factor_0.3%*%X%*%ones(p,1) + factor_0.3%*%epsilon
-  sd_y_lag_0.3 <- sd(y_lag_0.3)
-  y_lag_0.3 <- (y_lag_0.3-mean(y_lag_0.3))
+  y_lag <- factor%*%X%*%ones(p,1) + factor%*%epsilon
+  sd_y_lag <- sd(y_lag)
+  y_lag <- (y_lag-mean(y_lag))
   
 
  
   sim.data  <- data.frame(mget(paste0("x.", 1:p)), 
-                               y_lag_0.3,
-                                sd_y_lag_0.3)
+                               y_lag,
+                                sd_y_lag)
 
 
 ```
@@ -184,7 +184,7 @@ source("scripts/functions_numerical_experiments.R")
 Now we are starting the estimation procedure. Note that we are working without an intercept.
 ```{r model, echo = TRUE, collapse=TRUE}
 
-model = y_lag_0.3~x.1+x.2+x.3+x.4+x.5+x.6+x.7+x.8-1 
+model = y_lag~x.1+x.2+x.3+x.4+x.5+x.6+x.7+x.8-1 
 
 ```
 
@@ -212,7 +212,7 @@ coef_ols <-  ols_lag$coefficients
 
 ```{r RidgeRegression, echo = TRUE, collapse=TRUE}
 
-  RR_lag <- ridgeRegression(y_lag_0.3, X)
+  RR_lag <- ridgeRegression(y_lag, X)
   coef_RR<-  RR_lag$beta
 
 ```
@@ -221,7 +221,7 @@ coef_ols <-  ols_lag$coefficients
 
 ```{r SFRR, echo = TRUE, collapse=TRUE}
 
-    y_filtered <- (diag(length(y_lag_0.3)) - rho_sar *W) %*% y_lag_0.3
+    y_filtered <- (diag(length(y_lag)) - rho_sar *W) %*% y_lag
     
     SFRR_lag <- ridgeRegression(y_filtered, X)
     coef_SFRR <-   SFRR_lag$beta
@@ -235,7 +235,6 @@ coef_ols <-  ols_lag$coefficients
 We specify:
 
 * the `data` object, i.e. a dataframe containing variables used in the model.
-* the `grid` object, i.e. a dataframe containing the grid points.
 * the `model` object containing the model used.
 * the `buffer` object, i.e. the size of the buffer considered in Spatial Leave One Out
 
@@ -244,7 +243,7 @@ Then, we store the regression coefficients in `coef_RRSAR` and the estimated spa
 
 ```{r RRSAR, echo = TRUE, collapse=TRUE, message = FALSE, message=FALSE, eval=FALSE}
 
-      RRSAR_lag <- rrsar(data=sim.data, grid=grd, model=model, buffer=1)
+      RRSAR_lag <- rrsar(data=sim.data,  model=model, buffer=1)
       rho_RRSAR <- RRSAR_lag$rho
       coef_RRSAR <-   RRSAR_lag$Coefficients
 

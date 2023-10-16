@@ -63,13 +63,13 @@ The objective of this document is to provide the scheme of our simulation study.
 
 ## Data Simulation
 
-First, we create the grid. We considered a 30x30 grid contained in the square $[0,1]\times[0,1]$ for our simulation.
+First, we create the grid. We considered a 30x30 grid contained in the square $[0,10]\times[0,10]$ for our simulation.
 ```{r createGrid, echo = TRUE, collapse=TRUE}
   gridsize = c(30L, 30L)
   n= gridsize[1]
   m= gridsize[2]
-  Xvec <- seq(0, 1, len = gridsize[1])
-  Yvec <- seq(0, 1, len = gridsize[2])
+  Xvec <- seq(0, 10, len = gridsize[1])
+  Yvec <- seq(0, 10, len = gridsize[2])
   grd <- expand.grid(Y = Yvec, X = Xvec)
 ```
 
@@ -82,14 +82,14 @@ Then, we consider a contiguity matrix with rook neighbours `cont_mat`. The spati
 We generate the first covariate `x.1` as a Gaussian random field with an  exponential covariance function `expCov` with variance equal to 1 and scale set to 0.5.
 
 ```{r computeX1, echo = TRUE, collapse=TRUE}
-  expCov <- RMexp(var = 0.1, scale = 0.1)
+  expCov <- RMexp(var = 1, scale = 0.5)
   x.1 <- as.vector(t(RFsimulate(expCov, x = Xvec, y = Yvec, spConform = FALSE)))
 ```
 
 We generate the second covariate `x.2` as a Gaussian random field with a Gaussian covariance function `gausssCov` with variance equal to 1 and scale set to 0.4. Finally, we scale the variable.
 
 ```{r computeX2, echo = TRUE, collapse=TRUE}
-  gaussCov <- RMgauss(var = 0.1, scale = 0.1) #0.4 was a bit much
+  gaussCov <- RMgauss(var = 1, scale = 0.4) 
   x.2 <- as.vector(t(RFsimulate(gaussCov, x = Xvec, y = Yvec, spConform = FALSE)))
 ```
 
@@ -126,18 +126,18 @@ We compute the correlation matrix to show the presence of multicollinearity in t
 ```
 
 
-We consider in the paper the structure of the SEM model, with 5 different values of the spatial autoregressive coefficient reflecting weak to strong dependence,   $\rho\ \in (0.1, 0.3, 0.5, 0.7, 0.9)$. Here we present the simulation for $\rho = 0.3$. First, we will compute $(\mathbf{I} - \rho W)^{-1}$.
+We consider in the paper the structure of the SEM model, with 5 different values of the spatial autoregressive coefficient reflecting weak to strong dependence,   $\lambda\ \in (0.1, 0.3, 0.5, 0.7, 0.9)$. Here we present the simulation for $\lambda = 0.3$. First, we will compute $(\mathbf{I} - \lambda W)^{-1}$.
 
 ```{r computeDepFactor, echo = TRUE, collapse=TRUE}
   
-  rho=0.3
-  factor_0.3 <- solve(diag(1, n*m) - rho*W)  
+  lambda=0.3
+  factor <- solve(diag(1, n*m) - lambda*W)  
 
 ```
 
  We proceed to generate simulations of the dependent variable $\mathbf{y}$ for each value of the dependent  determined by the equation:
 $$
-\mathbf{y}=\mathbf{X}\pmb{\beta} + (I_n-\rho W)^{-1}\pmb{\varepsilon},
+\mathbf{y}=\mathbf{X}\pmb{\beta} + (I_n-\lambda W)^{-1}\pmb{\varepsilon},
 $$
 In this report we will work with 1 simulation of the dependent variable to illustrate the procedure, in our paper we give the results for 500 simulations.
 
@@ -149,21 +149,21 @@ In this report we will work with 1 simulation of the dependent variable to illus
 
 ```
 
-We compute the dependent variable. The error term is the product of a sampled standard normal distribution `epsilon` and $(\mathbf{I} - \rho W)^{-1}$. The vector of $\beta$ coefficients is set to a vector of ones `ones(p,1)`. Then, we center the dependent variable. Finally, we store the simulated data in a dataframe `sim.data`.
+We compute the dependent variable. The error term is the product of a sampled standard normal distribution `epsilon` and $(\mathbf{I} - \lambda W)^{-1}$. The vector of $\beta$ coefficients is set to a vector of ones `ones(p,1)`. Then, we center the dependent variable. Finally, we store the simulated data in a dataframe `sim.data`.
 
 ```{r computeDepVariable, echo = TRUE, collapse=TRUE}
 
   epsilon <- rnorm(n*m, mean=0, sd=1) 
   
-  y_lag_0.3 <- factor_0.3%*%X%*%ones(p,1) + factor_0.3%*%epsilon
-  sd_y_lag_0.3 <- sd(y_lag_0.3)
-  y_lag_0.3 <- (y_lag_0.3-mean(y_lag_0.3))
+  y_error <- factor%*%X%*%ones(p,1) + factor%*%epsilon
+  sd_y_error <- sd(y_error)
+  y_error <- (y_error-mean(y_error))
   
 
  
   sim.data  <- data.frame(mget(paste0("x.", 1:p)), 
-                               y_lag_0.3,
-                                sd_y_lag_0.3)
+                               y_error,
+                                sd_y_error)
 
 
 ```
@@ -185,7 +185,7 @@ Now we are starting the estimation procedure. Note that we are working without a
 
 ```{r model, echo = TRUE, collapse=TRUE}
 
-  model = y_lag_0.3~x.1+x.2+x.3+x.4+x.5+x.6+x.7+x.8-1 
+  model = y_error~x.1+x.2+x.3+x.4+x.5+x.6+x.7+x.8-1 
 
 ```
 
@@ -193,19 +193,19 @@ Now we are starting the estimation procedure. Note that we are working without a
 
 ```{r ols, echo = TRUE, collapse=TRUE}
    
-  ols_lag <- lm(model, data=sim.data)
-  coef_ols <-  ols_lag$coefficients
+  ols_error <- lm(model, data=sim.data)
+  coef_ols <-  ols_error$coefficients
 
 ```
 
-*Ordinary SEM estimation* We transform the spatial weights matrix `W` into a weights list object `listw`. To estimate the SEM coefficients we use the `lagsarlm` function (package `spatialreg`). Then, we store the regression coefficients in `coef_sar` and the estimated spatial dependence parameter in `rho_sar`.
+*Ordinary SEM estimation* We transform the spatial weights matrix `W` into a weights list object `listw`. To estimate the SEM coefficients we use the `errorsarlm` function (package `spatialreg`). Then, we store the regression coefficients in `coef_sem` and the estimated spatial dependence parameter in `lambda_sem`.
 
-```{r sar, echo = TRUE, collapse=TRUE, message=FALSE}
+```{r sem, echo = TRUE, collapse=TRUE, message=FALSE}
 
   listw <- mat2listw(W)
-  sar_lag <- spatialreg::lagsarlm(model, listw= listw, data = sim.data)
-  coef_sar <- sar_lag$coefficients
-  rho_sar <- sar_lag$rho
+  sem_error <- spatialreg::errorsarlm(model, listw= listw, data = sim.data)
+  coef_sem <- sem_error$coefficients
+  lambda_sem <- sem_error$lambda
 
 ```
 
@@ -213,19 +213,21 @@ Now we are starting the estimation procedure. Note that we are working without a
 
 ```{r RidgeRegression, echo = TRUE, collapse=TRUE}
 
-  RR_lag <- ridgeRegression(y_lag_0.3, X)
-  coef_RR<-  RR_lag$beta
+  RR_error <- ridgeRegression(y_error, X)
+  coef_RR<-  RR_error$beta
 
 ```
 
-*SFRR estimation* To estimate the SFRR coefficients we first apply the filter to the dependent variable, using the value of  $\rho$ estimated with the SEM model `rho_sar`. The we use the `ridgeRegression` function from the script loaded at the begining of this section with the filtered dependent variable `y_filtered`. Then, we store the regression coefficients in `coef_SFRR`.
+*SFRR estimation* To estimate the SFRR coefficients we first apply the filter to the dependent variable, using the value of  $\lambda$ estimated with the SEM model `lambda_sem`. Then, we use the `ridgeRegression` function from the script loaded at the begining of this section with the filtered dependent variable `y_filtered` and filtered covariates `X_filtered`. Then, we store the regression coefficients in `coef_SFRR`.
 
 ```{r SFRR, echo = TRUE, collapse=TRUE}
 
-    y_filtered <- (diag(length(y_lag_0.3)) - rho_sar *W) %*% y_lag_0.3
+   lambda_estimate <- sem_error$lambda
+      y_filtered <- (diag(length(y_error)) - lambda_estimate*W) %*% y_error
+      X_filtered <- (diag(length(y_error)) - lambda_estimate*W) %*% X
     
-    SFRR_lag <- ridgeRegression(y_filtered, X)
-    coef_SFRR <-   SFRR_lag$beta
+    SFRR_error <- ridgeRegression(y_filtered, X_filtered)
+    coef_SFRR <-   SFRR_error$beta
 
 ```
 
@@ -236,18 +238,17 @@ Now we are starting the estimation procedure. Note that we are working without a
 We specify:
 
 * the `data` object, i.e. a dataframe containing variables used in the model.
-* the `grid` object, i.e. a dataframe containing the grid points.
 * the `model` object containing the model used.
 * the `buffer` object, i.e. the size of the buffer considered in Spatial Leave One Out
 
-Then, we store the regression coefficients in `coef_RRSEM` and the estimated spatial dependence parameter in `rho_RRSEM`.
+Then, we store the regression coefficients in `coef_RRSEM` and the estimated spatial dependence parameter in `lambda_RRSEM`.
 
 
 ```{r RRSEM, echo = TRUE, collapse=TRUE, message = FALSE, message=FALSE,  eval=FALSE}
 
-    RRSEM_lag <- rrsem(data=sim.data, grid=grd, model=model, buffer=1)
-    rho_RRSEM <- RRSEM_lag$rho
-    coef_RRSEM <-   RRSEM_lag$Coefficients
+    RRSEM_error <- rrsem(data=sim.data,  model=model, buffer=1)
+    lambda_RRSEM <- RRSEM_error$lambda
+    coef_RRSEM <-   RRSEM_error$Coefficients
 
 ```
 
