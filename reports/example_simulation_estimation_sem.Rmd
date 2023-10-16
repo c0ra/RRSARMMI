@@ -57,7 +57,7 @@ As a reference, here is the **RRSEM estimation algorithm** that we propose:
 3.  Consider the filtered  $\mathbf{Y}_{\hat\lambda} = (\mathbf{I }- \hat\lambda W)\mathbf{Y}$, the filtered matrix  $\mathbf{X}_{\hat\lambda} = (\mathbf{I }- \hat\lambda W)\mathbf{X}$,  and 
 compute $$ \hat{\pmb{\beta}}_{R}^{SEM}=(\mathbf{X}^T_{\hat\lambda}\mathbf{X}_{\hat\lambda}+\gamma\mathbf{I}_p)^{-1}\mathbf{X}^T_{\hat\lambda}\mathbf{Y}_{\hat\lambda}$$  for $\gamma >0$. 
 4. Consider $\mathbf{ Y}_\lambda =\mathbf{X}_\lambda\hat{\pmb{\beta}}_R^{SEM}+\pmb{\varepsilon}$ and $\mathbf{e}_\lambda=\mathbf{y}_\lambda-\mathbf{X}_\lambda\hat{\pmb{\beta}}_R^{SEM}$  and estimate new $\lambda$ by using the concentrated  ML.   
-5.  Repeat step 3 to obtain the final  $ \hat{\pmb{\beta}}_{R}^{SEM}$ 
+5.  Repeat step 3 to obtain the final  $\hat{\pmb{\beta}}_{R}^{SEM}$ 
 
 The objective of this document is to provide the scheme of our simulation study. The document is organized as follows, first we will generate the data and second we will perform the necessary computations.
 
