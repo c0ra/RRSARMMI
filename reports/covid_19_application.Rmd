@@ -536,9 +536,9 @@ knitr::kable(dt_sar,  col.names = c("Coef",
                                 "Coef",
                                 "p-value",
                                 "Coef",
-                                "p-value",
-                                "p-value",
-                                "p-value" ), digits = 4)%>%
+                                "p-value (Perm; F-test)",
+                                "p-value (t-test)",
+                                "p-value (Perm. t-test)" ), digits = 4)%>%
   kable_styling(c("striped", "bordered")) %>%
   add_header_above(c("",
                      "SAR" = 2,"RRSAR" = 4))
@@ -549,11 +549,11 @@ knitr::kable(dt_sem,  col.names = c("Coef",
                                 "Coef",
                                 "p-value",
                                 "Coef",
-                                "p-value",
-                                "p-value",
-                                "p-value" ), digits = 4)%>%
+                                 "p-value (Perm; F-test)",
+                                "p-value (t-test)",
+                                "p-value (Perm. t-test)"  ), digits = 4)%>%
   kable_styling(c("striped", "bordered")) %>%
   add_header_above(c("",
-                     "SAR" = 2,"RRSAR" = 4))
+                     "SEM" = 2,"RRSEM" = 4))
 
 ```
