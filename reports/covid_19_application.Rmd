@@ -290,7 +290,7 @@ We use, `perm_f_test_parallel`, available in the loaded script to perform a perm
 
 * `buffer`: It represents the size of the buffer considered in the Spatial Leave One Out analysis.
 
-```{r Ftest, echo = TRUE, collapse=TRUE, mesage=FALSE}
+```{r Ftest, echo = TRUE, collapse=TRUE, mesage=FALSE, cache=TRUE}
 p_F_test<-perm_f_test_parallel(data, model, B=100, buffer = 1)
 ```
 
@@ -380,16 +380,16 @@ p_value_sem <- 2 * (1 - pt(abs(t_statistic_sem), df))
 
 And a permutation t-test for the importance of the variables.
 
-```{r permtTest, echo = TRUE, collapse=TRUE, mesage=FALSE}
+```{r permtTest, echo = TRUE, collapse=TRUE, mesage=FALSE, cache=TRUE}
 
-
+covariatevarnames <- colnames(x)
 
 p_t_test <- data.frame(SAR = c(NA, NA, NA, NA, NA, NA, NA, NA),
                        SEM = c(NA, NA, NA, NA, NA, NA, NA, NA))
 
 rownames(p_t_test) <- covariatevarnames
 
-
+B=100
 
 for (j in covariatevarnames){
   
@@ -536,9 +536,9 @@ knitr::kable(dt_sar,  col.names = c("Coef",
                                 "Coef",
                                 "p-value",
                                 "Coef",
-                                "p-value (Perm; F-test)",
-                                "p-value (t-test)",
-                                "p-value (Perm. t-test)" ), digits = 4)%>%
+                                "p-value",
+                                "p-value",
+                                "p-value" ), digits = 4)%>%
   kable_styling(c("striped", "bordered")) %>%
   add_header_above(c("",
                      "SAR" = 2,"RRSAR" = 4))
@@ -549,9 +549,9 @@ knitr::kable(dt_sem,  col.names = c("Coef",
                                 "Coef",
                                 "p-value",
                                 "Coef",
-                                 "p-value (Perm; F-test)",
-                                "p-value (t-test)",
-                                "p-value (Perm. t-test)"  ), digits = 4)%>%
+                                "p-value",
+                                "p-value",
+                                "p-value" ), digits = 4)%>%
   kable_styling(c("striped", "bordered")) %>%
   add_header_above(c("",
                      "SEM" = 2,"RRSEM" = 4))

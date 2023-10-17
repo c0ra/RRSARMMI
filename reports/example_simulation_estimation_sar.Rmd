@@ -31,6 +31,10 @@ rm(list=ls())
 #install.packages("RandomFields")
 library(RandomFields)
 
+# Ridge regression
+#install.packages("glmnet")
+library(glmnet)
+
 # Distance matrices
 #install.packages("spdep")
 library(spdep)
@@ -229,7 +233,7 @@ coef_ols <-  ols_lag$coefficients
 
 
 
-*RRSAR estimation* To estimate the RRSAR coefficients we use the `rrsar` function from the script loaded at the begining of this section.
+*RRSAR estimation* To estimate the RRSAR coefficients we use the `rrsar` function from the script loaded at the begining of this section. This function takes some time to run due to the use of SLOO for the selection of the regularization parameter.
 We specify:
 
 * the `data` object, i.e. a dataframe containing variables used in the model.
