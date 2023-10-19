@@ -17,7 +17,6 @@ options(Encoding="UTF-8")
 library("RColorBrewer")
 library("dplyr")
 library("gridExtra")
-library("ggbiplot")
 library("ggrepel")
 library("geojsonio")
 library("ggpubr")
@@ -77,9 +76,12 @@ The variables are:
 
 * `Urban`: indicator of an urban department.
 
-```{r  loadData, echo=TRUE, message = FALSE, collapse= TRUE}
+Also, we load the required functions.
 
-france_departement_covid_sf <- st_read("covid_data.shp")
+```{r  loadData, echo=TRUE, message = FALSE, collapse= TRUE}
+setwd("C:/Users/crist/OneDrive/Documents/Covid19France") #change to appropiate 
+source("scripts/functions_covid.R")
+france_departement_covid_sf <- st_read("data/covid_data.shp")
 ```
 
 ## Exploratory data analysis
@@ -208,7 +210,7 @@ Lets set the structure of the model we are considering and the size of the buffe
 ```{r model, echo = TRUE, collapse=TRUE}
 model <- LnHosp ~LnPop+C3+SLivR+
   Work+Inac+A65pls+
-  Emer+FDoc
+  Emer+FDoc - 1
 
 buffer=1
 
@@ -216,13 +218,16 @@ buffer=1
 
 ```
 
-We store the sample standard deviations- in `std_deviations` of the covariates before escaling the covariates and centering the dependent variable `LnHosp`.
+We store the sample standard deviations- in `std_deviations` of the covariates before centering and scaling the covariates and centering the dependent variable `LnHosp`.
 
-```{r echo = T, collpase= T}
+```{r sd, echo = TRUE, collapse= TRUE}
 std_deviations <- st_drop_geometry( france_departement_covid_sf) %>%
-  select(LnPop, C3, SLivR, Work, Inac, A65pls, Emer, FDoc) %>%
+  dplyr::select(LnPop, C3, SLivR, Work, Inac, A65pls, Emer, FDoc) %>%
   summarise_all(sd)%>%as.numeric()
+```
 
+
+```{r scaling, echo = TRUE, collapse= TRUE}
 
 data <-  france_departement_covid_sf %>%
   mutate(
@@ -242,24 +247,14 @@ data <-  france_departement_covid_sf %>%
 
 ```
 
-We load the required functions.
 
-```{r functions, echo=FALSE}
-
-source("scripts/functions_covid_new_estimation.R")
-
-```
 
 We estimate SAR and SEM models without regularization and store the results in `sar` and `sem`, respectively.
 
 ```{r SARsem, echo = TRUE, collapse=TRUE, message=FALSE, comment=FALSE}
- sar <- spatialreg::lagsarlm(LnHosp ~LnPop+C3+SLivR+
-  Work+Inac+A65pls+
-  Emer+FDoc-1,data=data,listw_1)
+ sar <- spatialreg::lagsarlm(model,data=data,listw_1)
  sar <-summary(sar)
- sem <- spatialreg::errorsarlm(LnHosp ~LnPop+C3+SLivR+
-  Work+Inac+A65pls+
-  Emer+FDoc-1,data=data,listw_1)
+ sem <- spatialreg::errorsarlm(model,data=data,listw_1)
  sem <- summary(sem)
 ```
 
@@ -273,7 +268,7 @@ We utilize two essential functions, `rrsar` and `rrsem`, available in the loaded
 
 * `plot`: By setting this variable to TRUE, we indicate that we wish to generate plots displaying the evolution of coefficient values and log-likelihood concerning variations in $\log(\gamma)$.
 
-
+Due to the usa of SLOO the following code chunk can take more less a minute to run.
 ```{r RRSARrrsem, echo = TRUE, collapse=TRUE, message=FALSE, comment=FALSE,  dpi = 72}
 coef_RRSAR <- rrsar(data, model, buffer, plot=TRUE)
 coef_RRSEM <- rrsem(data, model, buffer, plot=TRUE)
@@ -294,7 +289,7 @@ We use, `perm_f_test_parallel`, available in the loaded script to perform a perm
 p_F_test<-perm_f_test_parallel(data, model, B=100, buffer = 1)
 ```
 
-We also perform a the t-test for the importance of the variables.
+We also perform a t-test for the importance of the variables.
 
 ```{r TtestPrep, echo = TRUE, collapse=TRUE, mesage=FALSE}
 
@@ -304,7 +299,7 @@ mf <- lm(model, data,
 
 y <- model.extract(mf, "response")
 
-x <- model.matrix(mt, mf)[,-1]
+x <- model.matrix(mt, mf)
 
 
 n <- nrow(x) # number of observations 
@@ -410,7 +405,7 @@ compute_t_test_perm <- function(perm_j){
   mt <- terms(model, data = data_perm)
   mf <- lm(model, data_perm, method = "model.frame")
   y <- model.extract(mf, "response")
-  x <- model.matrix(mt, mf)[, -1]
+  x <- model.matrix(mt, mf)
 
   
   wy <- mat_w %*% y
@@ -495,7 +490,7 @@ p_t_test[j,"SEM"] <- format(p_sem_j, digits = 4)
 ```
 
 
-Finally, we present the results in two tables, one for SAR and one for SEM.
+Finally, we present the results in two tables, one for SAR and one for SEM. Due to the random choice of permutations, the following results somewhat differ from those presented in our paper.
 
 ```{r results, echo = TRUE, collapse=TRUE, mesage=FALSE}
 p_val_rho_rrsar <- format(as.numeric(coef_RRSAR[["pvalue"]]), digits = 0, trim = F, nsmall = 4)
@@ -505,13 +500,18 @@ p_val_rho_rrsem <- format(as.numeric(coef_RRSEM[["pvalue"]]), digits = 0, trim =
 p_val_coef_rrsem <- format(as.numeric(p_F_test$SEM), digits = 0, trim = F, nsmall = 4)
 
 
+p_val_pt_coef_rrsar <- format(as.numeric(p_t_test$SAR), digits = 0, trim = F, nsmall = 4)
+p_val_pt_coef_rrsem <- format(as.numeric(p_t_test$SEM), digits = 0, trim = F, nsmall = 4)
+
+
+
 dt_sar <- data.frame(coefsar=c(sar[["Coef"]][,1]/std_deviations,NA,sar[["rho"]][["rho"]]),
                  pvaluesar = c(sar[["Coef"]][,4],NA,as.numeric(sar[["LR1"]][["p.value"]])),
                  coefsar_ridge=c(coef_RRSAR[["Coefficients"]]/std_deviations,coef_RRSAR[["gamma"]],
                            coef_RRSAR[["rho"]]),
                  pvaluesar_ridge=c( p_val_coef_rrsar, NA,p_val_rho_rrsar),
                   pvaluesar_halawa=c( p_value_sar, NA,NA),
-                  pvaluesar_perm_ttest=c( p_t_test[,"SAR"], NA,NA)
+                  pvaluesar_perm_ttest=c( p_val_pt_coef_rrsar, NA,NA)
                 
                )
 
@@ -522,9 +522,9 @@ dt_sar <- data.frame(coefsar=c(sar[["Coef"]][,1]/std_deviations,NA,sar[["rho"]][
                  pvaluesem = c(sem[["Coef"]][,4],NA,as.numeric(sem[["LR1"]][["p.value"]])),
                  coefsem_ridge=c(coef_RRSEM[["Coefficients"]]/std_deviations,coef_RRSEM[["gamma"]],
                            coef_RRSEM[["lambda"]]),
-                 pvaluesem_ridge=c( p_val_coef_rrsem, NA,p_val_lambda_rrsem),
+                 pvaluesem_ridge=c( p_val_coef_rrsem, NA,p_val_rho_rrsem),
                pvaluesem_halawa=c( p_value_sem, NA,NA),
-                  pvaluesem_perm_ttest=c( p_t_test[,"SEM"], NA,NA)
+                  pvaluesem_perm_ttest=c(p_val_pt_coef_rrsem, NA,NA)
                )
 
   rownames(dt_sem) <-c(rownames(p_F_test),"$\\gamma$", "$\\lambda$")
@@ -534,11 +534,9 @@ opts <- options(knitr.kable.NA = "")
 knitr::kable(dt_sar,  col.names = c("Coef",
                                 "p-value",
                                 "Coef",
-                                "p-value",
-                                "Coef",
-                                "p-value",
-                                "p-value",
-                                "p-value" ), digits = 4)%>%
+                                "Perm. F-test p-value",
+                                "t-test p-value",
+                                "Perm. t-test p-value" ), digits = 4)%>%
   kable_styling(c("striped", "bordered")) %>%
   add_header_above(c("",
                      "SAR" = 2,"RRSAR" = 4))
@@ -547,11 +545,9 @@ opts <- options(knitr.kable.NA = "")
 knitr::kable(dt_sem,  col.names = c("Coef",
                                 "p-value",
                                 "Coef",
-                                "p-value",
-                                "Coef",
-                                "p-value",
-                                "p-value",
-                                "p-value" ), digits = 4)%>%
+                                "Perm. F-test p-value",
+                                "t-test p-value",
+                                "Perm. t-test p-value" ), digits = 4)%>%
   kable_styling(c("striped", "bordered")) %>%
   add_header_above(c("",
                      "SEM" = 2,"RRSEM" = 4))
