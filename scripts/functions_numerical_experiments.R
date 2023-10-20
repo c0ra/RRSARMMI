@@ -32,7 +32,7 @@ sar.lag.mixed.f <- function(rho, env) {
 }
 
 # Function to estimate spatial dependence parameter rho using maximum likelihood estimation
-sar_estimation<-function(data,formula, beta_0, beta_l, scale= FALSE){
+sar_estimation<-function(data,formula, beta_0, beta_l){
   verbose = FALSE
   
   
@@ -144,8 +144,7 @@ sar_estimation<-function(data,formula, beta_0, beta_l, scale= FALSE){
 # - data: Dataframe containing the data
 # - model: Linear regression formula
 # - buffer: Buffer size for Spatial Leave One Out (SLOO)
-# - scale: Logical value indicating whether to scale the variables
-rrsar <- function(data, model, buffer, scale=FALSE){
+rrsar <- function(data, model, buffer){
   
   # Store number of observations in n
   n<-nrow(data)
@@ -284,7 +283,7 @@ rrsar <- function(data, model, buffer, scale=FALSE){
   # considering 
   # e.lm.null <- y - x%*%beta_0
   # e.lm.w <- wy - x%*%beta_l
-  ridge_sar <- sar_estimation(data, model,beta_0=coef_0_ridge, beta_l=coef_l_ridge, scale=scale)
+  ridge_sar <- sar_estimation(data, model,beta_0=coef_0_ridge, beta_l=coef_l_ridge)
   
   
   
@@ -399,7 +398,7 @@ sem.error.f <- function(lambda, env) {
 }
 
 # Function to estimate spatial dependence parameter lambda using maximum likelihood estimation
-sem_estimation<-function(data,formula, beta_ridge, scale = FALSE){
+sem_estimation<-function(data,formula, beta_ridge){
   etype<-"error"
   zero.policy=TRUE
   method<-"eigen" 
@@ -515,8 +514,7 @@ sem_estimation<-function(data,formula, beta_ridge, scale = FALSE){
 # - data: Dataframe containing the data
 # - model: Linear regression formula
 # - buffer: Buffer size for Spatial Leave One Out (SLOO)
-# - scale: Logical value indicating whether to scale the variables
-rrsem <- function(data, model, buffer, scale=FALSE){
+rrsem <- function(data, model, buffer){
   
   # Extrat dependent variable and covariates from model
   mf <- lm(model, data,  method="model.frame")
@@ -609,7 +607,7 @@ rrsem <- function(data, model, buffer, scale=FALSE){
   
   # Step 2----
   #  Estimate lambda  for y= X*beta_ridge + u, u = lambda*W*u + epsilon
-  param_ridge_sem <- sem_estimation(data, model, beta_ridge, scale=scale) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
+  param_ridge_sem <- sem_estimation(data, model, beta_ridge) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
   
   
   #Step 3----
@@ -688,7 +686,7 @@ rrsem <- function(data, model, buffer, scale=FALSE){
   
   
   # Step 4: Estimate lambda using the new ridge coefficients----
-  param_ridge_sem <- sem_estimation(data, model, beta_ridge, scale=scale) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
+  param_ridge_sem <- sem_estimation(data, model, beta_ridge) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
   
   
   # Get the new filtered variables

@@ -33,7 +33,7 @@ sar.lag.mixed.f <- function(rho, env) {
 }
 
 # Function to estimate spatial dependence parameter rho using maximum likelihood estimation
-sar_estimation<-function(data, formula, beta_0, beta_l, scale= FALSE){
+sar_estimation<-function(data, formula, beta_0, beta_l){
   
   verbose = FALSE
   
@@ -151,8 +151,8 @@ sar_estimation<-function(data, formula, beta_0, beta_l, scale= FALSE){
 # - model: Linear regression formula
 # - buffer: Buffer size for Spatial Leave One Out (SLOO)
 # - plot: Wheter to return data sets and plot coefficients paths and loglikelihood curve
-# - scale: Logical value indicating whether to scale the variables
-rrsar <- function(data, model, buffer, plot = FALSE, scale=FALSE){
+
+rrsar <- function(data, model, buffer, plot = FALSE){
   
   # Store number of observations in n
   n<-nrow(data)
@@ -307,7 +307,7 @@ rrsar <- function(data, model, buffer, plot = FALSE, scale=FALSE){
   # considering 
   # e.lm.null <- y - x%*%beta_0
   # e.lm.w <- wy - x%*%beta_l
-  ridge_sar <- sar_estimation(data, model, beta_0=coef_0_ridge, beta_l=coef_l_ridge, scale=scale)
+  ridge_sar <- sar_estimation(data, model, beta_0=coef_0_ridge, beta_l=coef_l_ridge)
   
   # Step 3: Update rho, filtered dependent variable and perform ridge regression----
   y_filtered <- ridge_sar$y
@@ -481,7 +481,7 @@ sem.error.f <- function(lambda, env) {
 }
 
 # Function to estimate spatial dependence parameter lambda using maximum likelihood estimation
-estimation_sem<-function(data,formula, beta_ridge, scale = FALSE){
+estimation_sem<-function(data,formula, beta_ridge){
   
   etype<-"error"
   Durbin<-FALSE
@@ -624,8 +624,8 @@ estimation_sem<-function(data,formula, beta_ridge, scale = FALSE){
 # - model: Linear regression formula
 # - buffer: Buffer size for Spatial Leave One Out (SLOO)
 # - plot: Wheter to return data sets and plot coefficients paths and loglikelihood curve
-# - scale: Logical value indicating whether to scale the variables
-rrsem <- function(data, model, buffer, plot = FALSE, scale=FALSE){
+
+rrsem <- function(data, model, buffer, plot = FALSE){
   
   
   # Extrat dependent variable and covariates from model
@@ -724,7 +724,7 @@ rrsem <- function(data, model, buffer, plot = FALSE, scale=FALSE){
   
   # Step 2----
   #  Estimate lambda  for y= X*beta_ridge + u, u = lambda*W*u + epsilon
-  param_ridge_sem <-estimation_sem(data, model, beta_ridge, scale=scale) 
+  param_ridge_sem <-estimation_sem(data, model, beta_ridge) 
   
   # Get filtered  dependent variable and filtered covariates
   x_filtered<-param_ridge_sem$x
@@ -811,7 +811,7 @@ rrsem <- function(data, model, buffer, plot = FALSE, scale=FALSE){
   
   
   # Step 4: Estimate lambda using the new ridge coefficients----
-  param_ridge_sem <- estimation_sem(data, model, beta_ridge, scale=scale) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
+  param_ridge_sem <- estimation_sem(data, model, beta_ridge) # lambda estimation for y=lambda*W*y+ X*beta_ridge + epsilon
   
   # Get the new filtered variables
   x_filtered<-param_ridge_sem$x
@@ -976,15 +976,13 @@ perm_f_test_parallel <- function(data, model, B, buffer){
   y_lr <- model.extract(mf, "response") 
   
   #SAR
-  scale=FALSE
-  ridge_sar <- rrsar(data,model,buffer, scale=scale, plot=FALSE) #Do ridge regresion for SAR
+  ridge_sar <- rrsar(data,model,buffer,  plot=FALSE) #Do ridge regresion for SAR
   
   
   y_sar_est <- ridge_sar$predicted_values #Obtain estimated values y_1
   
   #SEM
-  scale=FALSE
-  ridge_sem <- rrsem(data,model,buffer, scale=scale, plot=FALSE) #Do ridge regresion for SAR
+  ridge_sem <- rrsem(data,model,buffer,  plot=FALSE) #Do ridge regresion for SAR
   
   
   y_sem_est <- ridge_sem$predicted_values #Obtain estimated values y_1
@@ -1058,8 +1056,8 @@ permute_variable_j <- function(j){
   model_j<-update(model, paste("~ . -",j)) #Eliminate variable j from formula
   
   #SAR
-  scale=FALSE
-  ridge_sar_j <- rrsar(data_j,model_j,buffer, scale=scale) #Do RRSAR without the variable j
+  
+  ridge_sar_j <- rrsar(data_j,model_j,buffer) #Do RRSAR without the variable j
   
   
   y_sar_pred_j <- ridge_sar_j$predicted_values #Obtain estimated values  y_0
@@ -1070,8 +1068,7 @@ permute_variable_j <- function(j){
   
   
   #SEM
-  scale=FALSE
-  ridge_sem_j <-  rrsem(data_j,model_j,buffer, scale=scale) #Do RRSEM without the variable j
+  ridge_sem_j <-  rrsem(data_j,model_j,buffer) #Do RRSEM without the variable j
   
   
   y_sem_pred_j <- ridge_sem_j$predicted_values #Obtain estimated values y_0
@@ -1116,8 +1113,8 @@ perm_sar <-function(x, varname, y_sar_pred_j, y_lr, F_sar_j){
   data_perm <- data
   data_perm[,j]<-x
   #SAR
-  scale=FALSE
-  ridge_sar_perm <- rrsar(data_perm,model,buffer, scale=scale) #Do RRSAR with j variable permutated
+  
+  ridge_sar_perm <- rrsar(data_perm,model,buffer) #Do RRSAR with j variable permutated
   
   
   y_sar_perm <- ridge_sar_perm$predicted_values #Obtain estimated values
@@ -1144,8 +1141,7 @@ perm_sem <-function(x, varname, y_sem_pred_j, y_lr, F_sem_j){
   data_perm[,j]<-x
   
   #SEM
-  scale=FALSE
-  ridge_sem_perm <- rrsem(data_perm,model,buffer, scale=scale) #Do RRSEM with j variable permutated
+  ridge_sem_perm <- rrsem(data_perm,model,buffer) #Do RRSEM with j variable permutated
   y_sem_perm <- ridge_sem_perm$predicted_values #Obtain estimated values
   f<-(sqrt(crossprod(y_lr-y_sem_pred_j))^2/sqrt(crossprod(y_lr-y_sem_perm))^2)-1 # compute approximation of F-statistic
   F_j_sem<- f >= F_sem_j # Compare approximation with F-statistic
